@@ -1,0 +1,27 @@
+[gd_scene format=3 uid="uid://cyk08fhovqvnn"]
+
+[ext_resource type="Script" uid="uid://ctqakpv1b720l" path="res://objects/falling_cube/falling_cube.gd" id="1_5uyn0"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_47j0y"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_47j0y"]
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_x5whq"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:rotation")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+
+[node name="FallingCube" type="RigidBody3D" unique_id=1497685312]
+script = ExtResource("1_5uyn0")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1260806791]
+mesh = SubResource("BoxMesh_47j0y")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1976431402]
+shape = SubResource("BoxShape3D_47j0y")
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=426863688]
+replication_config = SubResource("SceneReplicationConfig_x5whq")

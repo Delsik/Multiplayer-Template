@@ -1,0 +1,39 @@
+[gd_scene format=3 uid="uid://cgoebvuyygstk"]
+
+[ext_resource type="Script" uid="uid://dyrnnjoqb5fyl" path="res://scenes/lobby/lobby.gd" id="1_1ig7j"]
+
+[node name="Lobby" type="Control" unique_id=1151859589]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_1ig7j")
+
+[node name="CenterContainer" type="CenterContainer" parent="." unique_id=862266184]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer" unique_id=1445789147]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="PlayerList" type="ItemList" parent="CenterContainer/VBoxContainer" unique_id=341743500]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+
+[node name="StartButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=931252339]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Почати гру"
+
+[node name="LeaveButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1877348759]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Вийти в меню"

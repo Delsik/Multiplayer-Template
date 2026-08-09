@@ -1,0 +1,59 @@
+[gd_scene format=3 uid="uid://cjumx4s4au4gt"]
+
+[ext_resource type="Script" uid="uid://c51qb5xk5cuh6" path="res://scenes/menu/menu.gd" id="1_klgdb"]
+
+[node name="Menu" type="Control" unique_id=585021956]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_klgdb")
+
+[node name="CenterContainer" type="CenterContainer" parent="." unique_id=1843231787]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer" unique_id=140700869]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="NameEdit" type="LineEdit" parent="CenterContainer/VBoxContainer" unique_id=1743246940]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+placeholder_text = "Ім'я"
+
+[node name="SoloButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=496780949]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Solo"
+
+[node name="HostButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1073611579]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Host"
+
+[node name="IPEdit" type="LineEdit" parent="CenterContainer/VBoxContainer" unique_id=2018024271]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "127.0.0.1"
+placeholder_text = "127.0.0.1"
+
+[node name="JoinButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1699166519]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Join"
+
+[node name="ErrorLabel" type="Label" parent="CenterContainer/VBoxContainer" unique_id=324719704]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+
+[connection signal="pressed" from="CenterContainer/VBoxContainer/SoloButton" to="." method="_on_solo_button_pressed"]
+[connection signal="pressed" from="CenterContainer/VBoxContainer/HostButton" to="." method="_on_host_button_pressed"]
+[connection signal="pressed" from="CenterContainer/VBoxContainer/JoinButton" to="." method="_on_join_button_pressed"]
