@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://cgoebvuyygstk"]
 
-[ext_resource type="Script" uid="uid://dyrnnjoqb5fyl" path="res://scenes/lobby/lobby.gd" id="1_1ig7j"]
+[ext_resource type="Script" uid="uid://dyrnnjoqb5fyl" path="res://ui/lobby/lobby.gd" id="1_vdyns"]
 
 [node name="Lobby" type="Control" unique_id=1151859589]
 layout_mode = 3
@@ -9,7 +9,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_1ig7j")
+script = ExtResource("1_vdyns")
 
 [node name="CenterContainer" type="CenterContainer" parent="." unique_id=862266184]
 layout_mode = 1

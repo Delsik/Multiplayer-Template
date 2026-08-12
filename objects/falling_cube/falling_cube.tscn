@@ -25,3 +25,4 @@ shape = SubResource("BoxShape3D_47j0y")
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=426863688]
 replication_config = SubResource("SceneReplicationConfig_x5whq")
+public_visibility = false

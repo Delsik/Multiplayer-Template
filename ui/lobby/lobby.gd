@@ -31,7 +31,7 @@ func _on_start_button_pressed() -> void:
 
 
 func _on_leave_button_pressed() -> void:
-	Network.end_game()
+	Network.leave_game()
 
 
 func _on_game_error(what: String) -> void:

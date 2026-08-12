@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://b4u6tb5w602ya"]
 
 [ext_resource type="Script" uid="uid://dcip57jrfh3ue" path="res://scenes/game/game_world.gd" id="1_x1dlf"]
+[ext_resource type="Script" uid="uid://bov6q5gulvsgu" path="res://ui/menu/safe_area.gd" id="2_q0j28"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_47j0y"]
 size = Vector2(20, 20)
@@ -35,10 +36,22 @@ autostart = true
 
 [node name="UI" type="CanvasLayer" parent="." unique_id=807873778]
 
-[node name="LeaveButton" type="Button" parent="UI" unique_id=1668291598]
+[node name="SafeArea" type="MarginContainer" parent="UI" unique_id=638084086]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("2_q0j28")
+
+[node name="Content" type="Control" parent="UI/SafeArea" unique_id=404910172]
+layout_mode = 2
+
+[node name="LeaveButton" type="Button" parent="UI/SafeArea/Content" unique_id=1668291598]
 custom_minimum_size = Vector2(100, 44)
+layout_mode = 1
 offset_left = 16.0
 offset_top = 16.0
-offset_right = 96.0
+offset_right = 116.0
 offset_bottom = 60.0
 text = "Вийти"

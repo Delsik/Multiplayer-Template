@@ -1,0 +1,38 @@
+[gd_scene format=3 uid="uid://cwluk7tjjs1ka"]
+
+[ext_resource type="Script" uid="uid://bq7bi7va4gwx4" path="res://ui/loading/loading_screen.gd" id="1_ur1ya"]
+
+[node name="LoadingScreen" type="CanvasLayer" unique_id=252337337]
+script = ExtResource("1_ur1ya")
+
+[node name="Root" type="Control" parent="." unique_id=1083591524]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ColorRect" type="ColorRect" parent="Root" unique_id=1710391109]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.52156866)
+
+[node name="Label" type="Label" parent="Root" unique_id=944456926]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -59.0
+offset_top = -11.5
+offset_right = 59.0
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+text = "Завантаження"

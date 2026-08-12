@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://cjumx4s4au4gt"]
 
-[ext_resource type="Script" uid="uid://c51qb5xk5cuh6" path="res://scenes/menu/menu.gd" id="1_klgdb"]
+[ext_resource type="Script" uid="uid://c51qb5xk5cuh6" path="res://ui/menu/menu.gd" id="1_qlbuq"]
 
 [node name="Menu" type="Control" unique_id=585021956]
 layout_mode = 3
@@ -9,7 +9,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_klgdb")
+script = ExtResource("1_qlbuq")
 
 [node name="CenterContainer" type="CenterContainer" parent="." unique_id=1843231787]
 layout_mode = 1
@@ -28,6 +28,7 @@ theme_override_constants/separation = 6
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 placeholder_text = "Ім'я"
+max_length = 14
 
 [node name="SoloButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=496780949]
 custom_minimum_size = Vector2(0, 44)
@@ -39,11 +40,21 @@ custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 text = "Host"
 
+[node name="ScanButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1132017856]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Шукати ігри поблизу"
+
+[node name="HostList" type="ItemList" parent="CenterContainer/VBoxContainer" unique_id=1953161890]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+
 [node name="IPEdit" type="LineEdit" parent="CenterContainer/VBoxContainer" unique_id=2018024271]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 text = "127.0.0.1"
 placeholder_text = "127.0.0.1"
+max_length = 20
 
 [node name="JoinButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1699166519]
 custom_minimum_size = Vector2(0, 44)
@@ -54,6 +65,13 @@ text = "Join"
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 
-[connection signal="pressed" from="CenterContainer/VBoxContainer/SoloButton" to="." method="_on_solo_button_pressed"]
-[connection signal="pressed" from="CenterContainer/VBoxContainer/HostButton" to="." method="_on_host_button_pressed"]
-[connection signal="pressed" from="CenterContainer/VBoxContainer/JoinButton" to="." method="_on_join_button_pressed"]
+[node name="CancelButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1931741246]
+visible = false
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Скасувати"
+
+[node name="QuitButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1927796695]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Закрити гру"
