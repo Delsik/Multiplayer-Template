@@ -1,12 +1,14 @@
 extends Control
 
-## Мінімальний touch HUD для кросплатформного network test.
-## Кнопки не знають нічого про ENet, peer ID або avatar: вони лише натискають
-## ті самі InputMap actions, які на desktop приходять від клавіатури.
+## Gameplay touch HUD для спільного InputMap.
+## TouchScreenButton напряму натискає move_* actions, тому ця сцена нічого
+## не знає про ENet, peer ID або avatar. passby_press дозволяє провести
+## утримуваний палець на сусідній напрямок без попереднього відпускання.
 
 const BUTTON_SIZE := Vector2(72.0, 72.0)
 const BUTTON_GAP := 8.0
 const EDGE_MARGIN := 20.0
+const LABEL_FONT_SIZE := 28
 
 const BUTTON_CONFIGS := [
 	{"node_name": "MoveForward", "label": "▲", "action": "move_forward"},
@@ -16,82 +18,90 @@ const BUTTON_CONFIGS := [
 ]
 
 var _buttons_by_action: Dictionary = {}
+var _centers_by_action: Dictionary = {}
 
 
 func _ready() -> void:
-	# У release desktop build touch HUD не показується. У debug build він
-	# видимий і на ПК, щоб тестувати кнопки мишею без Android export.
+	# У release desktop build HUD прихований. У debug build він видимий,
+	# щоб перевірити його розміщення без Android export.
 	visible = OS.has_feature("mobile") or OS.is_debug_build()
 	if not visible:
 		return
 
+	# Сам Control не ловить gameplay input. Його дочірні TouchScreenButton
+	# мають власні Shape2D для hit detection.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_create_buttons()
-	resized.connect(_layout_buttons)
-	_layout_buttons()
+	_create_touch_buttons()
+	resized.connect(_layout_touch_buttons)
+	_layout_touch_buttons()
 
 
 func _exit_tree() -> void:
-	# Якщо scene закривається в момент натиснутої кнопки, не залишаємо
-	# InputMap action у pressed-стані для наступної сесії.
+	# Якщо сцена закривається, поки палець утримує напрямок, не залишаємо
+	# synthetic InputMap action натиснутою для наступної сесії.
 	for button_config in BUTTON_CONFIGS:
 		Input.action_release(str(button_config["action"]))
 
 
-func _create_buttons() -> void:
+func _create_touch_buttons() -> void:
 	for button_config in BUTTON_CONFIGS:
 		var action: String = str(button_config["action"])
-		var button := Button.new()
-		button.name = str(button_config["node_name"])
-		button.text = str(button_config["label"])
-		button.custom_minimum_size = BUTTON_SIZE
-		button.focus_mode = Control.FOCUS_NONE
-		button.mouse_filter = Control.MOUSE_FILTER_STOP
-		button.add_theme_font_size_override("font_size", 28)
-		button.add_theme_stylebox_override("normal", _make_button_style(Color("#334155B8")))
-		button.add_theme_stylebox_override("hover", _make_button_style(Color("#475569D8")))
-		button.add_theme_stylebox_override("pressed", _make_button_style(Color("#0F172AE8")))
-
-		button.button_down.connect(_on_direction_pressed.bind(action))
-		button.button_up.connect(_on_direction_released.bind(action))
-		add_child(button)
-		_buttons_by_action[action] = button
+		var touch_button := TouchScreenButton.new()
+		touch_button.name = str(button_config["node_name"])
+		touch_button.action = action
+		touch_button.passby_press = true
+		touch_button.visibility_mode = TouchScreenButton.VISIBILITY_ALWAYS
+		touch_button.shape = _make_hit_shape()
+		touch_button.shape_visible = false
+		add_child(touch_button)
+		_buttons_by_action[action] = touch_button
 
 
-func _layout_buttons() -> void:
-	# TouchControls є дочірнім Control усередині SafeArea, тож `size`
-	# уже не включає виріз екрана, rounded corners або нижню gesture area.
-	var bottom_y := size.y - EDGE_MARGIN - BUTTON_SIZE.y
-	var center_x := EDGE_MARGIN + BUTTON_SIZE.x + BUTTON_GAP
-
-	_get_button("move_forward").position = Vector2(center_x, bottom_y - BUTTON_SIZE.y - BUTTON_GAP)
-	_get_button("move_left").position = Vector2(EDGE_MARGIN, bottom_y)
-	_get_button("move_right").position = Vector2(center_x + BUTTON_SIZE.x + BUTTON_GAP, bottom_y)
-	_get_button("move_back").position = Vector2(center_x, bottom_y + BUTTON_SIZE.y + BUTTON_GAP)
+func _make_hit_shape() -> RectangleShape2D:
+	var hit_shape := RectangleShape2D.new()
+	hit_shape.size = BUTTON_SIZE
+	return hit_shape
 
 
-func _get_button(action: String) -> Button:
-	return _buttons_by_action[action] as Button
+func _layout_touch_buttons() -> void:
+	# TouchControls заповнює Content всередині SafeArea. Отже нижня межа size.y
+	# уже не містить Android gesture area, iPhone home indicator чи display cutout.
+	# Усі чотири центри лишаються всередині цієї області.
+	var left_x := EDGE_MARGIN + BUTTON_SIZE.x * 0.5
+	var middle_x := left_x + BUTTON_SIZE.x + BUTTON_GAP
+	var right_x := middle_x + BUTTON_SIZE.x + BUTTON_GAP
+	var lower_y := size.y - EDGE_MARGIN - BUTTON_SIZE.y * 0.5
+	var upper_y := lower_y - BUTTON_SIZE.y - BUTTON_GAP
+
+	_set_button_center("move_forward", Vector2(middle_x, upper_y))
+	_set_button_center("move_left", Vector2(left_x, lower_y))
+	_set_button_center("move_right", Vector2(right_x, lower_y))
+	_set_button_center("move_back", Vector2(middle_x, lower_y))
+	queue_redraw()
 
 
-func _on_direction_pressed(action: String) -> void:
-	Input.action_press(action)
+func _set_button_center(action: String, center: Vector2) -> void:
+	var touch_button := _buttons_by_action[action] as TouchScreenButton
+	touch_button.position = center
+	_centers_by_action[action] = center
 
 
-func _on_direction_released(action: String) -> void:
-	Input.action_release(action)
+func _draw() -> void:
+	if not visible:
+		return
 
+	var font := ThemeDB.fallback_font
+	for button_config in BUTTON_CONFIGS:
+		var action: String = str(button_config["action"])
+		var center: Vector2 = _centers_by_action.get(action, Vector2.ZERO)
+		var touch_button := _buttons_by_action.get(action) as TouchScreenButton
+		var is_pressed := touch_button != null and touch_button.is_pressed()
+		var fill_color := Color("#0F172AE8") if is_pressed else Color("#334155B8")
 
-func _make_button_style(background_color: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background_color
-	style.corner_radius_top_left = 18
-	style.corner_radius_top_right = 18
-	style.corner_radius_bottom_right = 18
-	style.corner_radius_bottom_left = 18
-	style.border_width_left = 1
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.border_color = Color("#FFFFFF55")
-	return style
+		draw_circle(center, BUTTON_SIZE.x * 0.5, fill_color)
+		draw_arc(center, BUTTON_SIZE.x * 0.5, 0.0, TAU, 32, Color("#FFFFFF55"), 1.0)
+
+		var label: String = str(button_config["label"])
+		var label_size := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_FONT_SIZE)
+		var label_position := center + Vector2(-label_size.x * 0.5, label_size.y * 0.34)
+		draw_string(font, label_position, label, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_FONT_SIZE, Color.WHITE)
