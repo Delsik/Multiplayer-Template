@@ -27,6 +27,10 @@ var players_by_peer_id: Dictionary = {}
 ## що GameWorld у них локально готовий. Поки peer тут — йому НЕ показуємо
 ## жодних нових об'єктів (див. is_peer_ready() і game_world.gd).
 var _pending_late_joiners: Array[int] = []
+## Peer, які були в сесії на момент Start Game і мають підтвердити,
+## що їхній GameWorld уже створено, перш ніж сервер запустить симуляцію.
+var _initial_world_loading_peer_ids: Array[int] = []
+var _is_initial_world_loading := false
 
 # --- LAN-виявлення (щоб не вводити IP вручну на мобільних) ---
 const DISCOVERY_PORT := 10568
@@ -103,10 +107,11 @@ func _on_peer_connected(id: int) -> void:
 	if multiplayer.is_server():
 		sync_player_registry.rpc_id(id, players_by_peer_id)
 
-	# Late join: якщо гра вже триває, лише сервер наздоганяє новачка світом.
-	# Доки peer не підтвердив готовність (world_ready), він у _pending_late_joiners
-	# і не отримує видимість жодних нових об'єктів — див. game_world.gd.
-	if multiplayer.is_server() and has_node(^"/root/GameWorld"):
+	# Peer, що з’явився після натискання Start, не входив у стартовий snapshot
+	# і не повинен затримувати симуляцію. Він проходить окремий late-join flow.
+	# Це працює і в короткий проміжок initial loading, коли GameWorld хоста ще
+	# не додано до scene tree.
+	if multiplayer.is_server() and (_is_initial_world_loading or has_node(^"/root/GameWorld")):
 		_pending_late_joiners.append(id)
 		load_world_for_late_joiner.rpc_id(id)
 
@@ -119,6 +124,8 @@ func _on_peer_disconnected(id: int) -> void:
 		_publish_player_registry()
 
 	_pending_late_joiners.erase(id)
+	if _initial_world_loading_peer_ids.erase(id):
+		_try_start_world_simulation()
 
 
 func _on_connected_ok() -> void:
@@ -373,6 +380,9 @@ func end_game() -> void:
 	multiplayer.multiplayer_peer = null
 
 	players_by_peer_id.clear()
+	_pending_late_joiners.clear()
+	_initial_world_loading_peer_ids.clear()
+	_is_initial_world_loading = false
 	player_list_changed.emit()
 	game_ended.emit()
 
@@ -388,39 +398,77 @@ func _cleanup_local_scene() -> void:
 
 # --- Перехід лобі → гра ---
 
-## call_local: серверу теж треба виконати цей самий код у себе, а не лише розіслати клієнтам.
-## Використовується лише для СИНХРОННОГО старту гри — коли всі поточні гравці
-## переходять у GameWorld одночасно (begin_game(), .rpc() без адресата).
+## Викликається server-ом для всіх peer, які були у лобі в момент Start Game.
 @rpc("call_local", "reliable")
 func load_world() -> void:
-	await _create_world()
+	var world_created := await _create_world()
+	if not world_created:
+		return
+
+	# Host викликає server handler локально; клієнти надсилають готовність
+	# через RPC. В обох випадках сервер отримає world_ready для кожного peer.
+	if multiplayer.is_server():
+		world_ready()
+	else:
+		world_ready.rpc_id(1)
 
 
-## Без call_local: викликається сервером через .rpc_id(id) ЛИШЕ для гравця,
-## що приєднався до вже запущеної гри. Якби тут був call_local, сервер створив
-## би собі другий GameWorld при кожному новому підключенні — саме тому ця
-## функція окрема, а не повторне використання load_world().
+## Викликається server-ом лише для peer, який підключився вже після Start.
 @rpc("reliable")
 func load_world_for_late_joiner() -> void:
-	await _create_world()
-	# Повідомляємо сервер: "у мене вже є GameWorld, можна відновлювати спавн".
+	var world_created := await _create_world()
+	if not world_created:
+		return
 	world_ready.rpc_id(1)
 
 
-## Клієнт, що щойно приєднався, підтверджує готовність. Виконує щось лише
-## на сервері — на клієнтах ця RPC просто ніколи не буде викликана з їхнього боку.
+## Кожен peer підтверджує, що локально створив GameWorld.
+## Сервер використовує цю відповідь або для стартового loading barrier,
+## або для окремого late-join visibility flow.
 @rpc("any_peer", "reliable")
 func world_ready() -> void:
 	if not multiplayer.is_server():
 		return
-	var id := multiplayer.get_remote_sender_id()
-	_pending_late_joiners.erase(id)
 
-	# Гравець тепер "готовий" — показуємо йому все, що вже відбувається
-	# в грі, а не лише те, що з'явиться після цього моменту.
+	# Host викликає world_ready() локально, тому remote sender ID дорівнює 0.
+	# У high-level multiplayer сервер завжди має peer_id = 1.
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id == 0:
+		peer_id = 1
+
+	if _initial_world_loading_peer_ids.erase(peer_id):
+		_try_start_world_simulation()
+		return
+
+	if not _pending_late_joiners.erase(peer_id):
+		return
+
+	# Late joiner готовий: повертаємо йому visibility на всі куби,
+	# які вже існують у server-authoritative світі.
 	var world := get_tree().get_root().get_node_or_null(^"GameWorld")
 	if world and world.has_method("grant_visibility_to_late_joiner"):
-		world.grant_visibility_to_late_joiner(id)
+		world.grant_visibility_to_late_joiner(peer_id)
+
+
+## Якщо всі peer зі стартового snapshot готові, server запускає simulation.
+func _try_start_world_simulation() -> void:
+	if not multiplayer.is_server() or not _is_initial_world_loading:
+		return
+	if not _initial_world_loading_peer_ids.is_empty():
+		return
+
+	_is_initial_world_loading = false
+	start_world_simulation.rpc()
+
+
+## Окремий RPC робить момент старту явним для всіх peer.
+## Зараз лише server запускає SpawnTimer, але надалі цей самий сигнал може
+## увімкнути game HUD, countdown, audio або інші клієнтські системи.
+@rpc("authority", "call_local", "reliable")
+func start_world_simulation() -> void:
+	var world := get_tree().get_root().get_node_or_null(^"GameWorld")
+	if world and world.has_method("begin_simulation"):
+		world.begin_simulation()
 
 
 ## Чи можна показувати цьому peer нові репліковані об'єкти прямо зараз.
@@ -429,7 +477,7 @@ func is_peer_ready(id: int) -> bool:
 	return not _pending_late_joiners.has(id)
 
 
-func _create_world() -> void:
+func _create_world() -> bool:
 	var loading_screen: CanvasLayer = load(LOADING_SCREEN_SCENE).instantiate()
 	get_tree().get_root().add_child(loading_screen)
 
@@ -446,7 +494,7 @@ func _create_world() -> void:
 	if status != ResourceLoader.THREAD_LOAD_LOADED:
 		push_error("Не вдалось завантажити GameWorld: статус %d" % status)
 		loading_screen.queue_free()
-		return
+		return false
 
 	var world_scene: PackedScene = ResourceLoader.load_threaded_get(GAME_WORLD_SCENE)
 	var world: Node3D = world_scene.instantiate()
@@ -458,8 +506,18 @@ func _create_world() -> void:
 		lobby.hide()
 
 	loading_screen.queue_free()
+	return true
 
 
 func begin_game() -> void:
 	assert(multiplayer.is_server(), "begin_game() can only be called by the server")
+
+	# Snapshot створюється рівно в момент Start. Peer, які зайдуть пізніше,
+	# підуть у late-join flow і не зможуть затримати старт усіх гравців.
+	_initial_world_loading_peer_ids.clear()
+	_initial_world_loading_peer_ids.append(1)
+	for peer_id in multiplayer.get_peers():
+		_initial_world_loading_peer_ids.append(peer_id)
+
+	_is_initial_world_loading = true
 	load_world.rpc()

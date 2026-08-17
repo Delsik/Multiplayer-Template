@@ -16,9 +16,17 @@ func _ready() -> void:
 
 	if multiplayer.is_server():
 		spawn_timer.timeout.connect(_on_spawn_timer_timeout)
-	else:
-		# Тільки сервер вирішує, коли і де з'являється новий кубик.
-		spawn_timer.stop()
+
+	# Навіть server не запускає таймер у _ready(). Він чекатиме явного
+	# begin_simulation() після world_ready від усіх стартових peer.
+	spawn_timer.stop()
+
+
+## Викликається лише після стартового loading barrier.
+func begin_simulation() -> void:
+	if not multiplayer.is_server():
+		return
+	spawn_timer.start()
 
 
 func _on_leave_button_pressed() -> void:

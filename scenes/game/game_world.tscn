@@ -32,7 +32,6 @@ shape = SubResource("BoxShape3D_y7m1x")
 spawn_path = NodePath("../Cubes")
 
 [node name="SpawnTimer" type="Timer" parent="." unique_id=1965730581]
-autostart = true
 
 [node name="UI" type="CanvasLayer" parent="." unique_id=807873778]
 
