@@ -1,3 +1,7 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+# Local Android debug/release outputs and signing material.
+/builds/
+*.keystore
+*.jks
