@@ -1,0 +1,35 @@
+[gd_scene format=3 uid="uid://brcd2bd0bxvwv"]
+
+[ext_resource type="Script" uid="uid://cyd7ulvfqqmq2" path="res://objects/player_avatar/player_avatar.gd" id="1_oqp1e"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_47j0y"]
+radius = 0.45
+height = 1.8
+radial_segments = 16
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_y2esx"]
+radius = 0.45
+height = 1.8
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_6mvij"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+
+[node name="PlayerAvatar" type="CharacterBody3D" unique_id=2026570532]
+script = ExtResource("1_oqp1e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=723749920]
+mesh = SubResource("CapsuleMesh_47j0y")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=2060903668]
+shape = SubResource("CapsuleShape3D_y2esx")
+
+[node name="NameLabel" type="Label3D" parent="." unique_id=2097801050]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 0)
+billboard = 1
+outline_size = 6
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=69140060]
+replication_config = SubResource("SceneReplicationConfig_6mvij")
+public_visibility = false
