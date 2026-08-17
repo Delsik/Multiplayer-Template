@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://dcip57jrfh3ue" path="res://scenes/game/game_world.gd" id="1_x1dlf"]
 [ext_resource type="Script" uid="uid://bov6q5gulvsgu" path="res://ui/menu/safe_area.gd" id="2_q0j28"]
+[ext_resource type="Script" uid="uid://c3kjn62ivsl13" path="res://ui/touch_controls/touch_controls.gd" id="3_20hbm"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_47j0y"]
 size = Vector2(20, 20)
@@ -54,6 +55,16 @@ offset_top = 16.0
 offset_right = 116.0
 offset_bottom = 60.0
 text = "Вийти"
+
+[node name="TouchControls" type="Control" parent="UI/SafeArea/Content" unique_id=1566063738]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_20hbm")
 
 [node name="Players" type="Node3D" parent="." unique_id=1399616106]
 
