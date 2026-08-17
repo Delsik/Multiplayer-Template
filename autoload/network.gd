@@ -124,7 +124,8 @@ func _on_peer_disconnected(id: int) -> void:
 		_publish_player_registry()
 
 	_pending_late_joiners.erase(id)
-	if _initial_world_loading_peer_ids.erase(id):
+	if _initial_world_loading_peer_ids.has(id):
+		_initial_world_loading_peer_ids.erase(id)
 		_try_start_world_simulation()
 
 
@@ -436,12 +437,14 @@ func world_ready() -> void:
 	if peer_id == 0:
 		peer_id = 1
 
-	if _initial_world_loading_peer_ids.erase(peer_id):
+	if _initial_world_loading_peer_ids.has(peer_id):
+		_initial_world_loading_peer_ids.erase(peer_id)
 		_try_start_world_simulation()
 		return
 
-	if not _pending_late_joiners.erase(peer_id):
+	if not _pending_late_joiners.has(peer_id):
 		return
+	_pending_late_joiners.erase(peer_id)
 
 	# Late joiner готовий: повертаємо йому visibility на всі куби,
 	# які вже існують у server-authoritative світі.
