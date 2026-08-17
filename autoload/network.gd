@@ -333,37 +333,18 @@ func cancel_connecting() -> void:
 ## не "світилась" у сканерах мережі, попри те що вона технічно теж сервер.
 func start_lan_discovery_server() -> void:
 	_discovery_server = PacketPeerUDP.new()
-	var bind_error := _discovery_server.bind(DISCOVERY_PORT)
-	if bind_error != OK:
-		# Host session лишається робочою: інші гравці все одно можуть
-		# ввести IP вручну. Просто не запускаємо LAN advertising.
-		push_warning("Не вдалося запустити LAN discovery: %s" % error_string(bind_error))
-		_discovery_server = null
-		return
-
-	# Android Wi-Fi може відфільтровувати broadcast-запити від ПК. Lock
-	# потрібен лише поки цей peer рекламує host через discovery сервер.
-	AndroidMulticast.acquire("lan_host")
+	_discovery_server.bind(DISCOVERY_PORT)
 
 
 func stop_lan_discovery_server() -> void:
 	if _discovery_server:
 		_discovery_server.close()
 		_discovery_server = null
-	AndroidMulticast.release("lan_host")
-
-
-func _stop_lan_discovery_client() -> void:
-	if _discovery_client:
-		_discovery_client.close()
-		_discovery_client = null
-	AndroidMulticast.release("lan_scan")
 
 
 ## Розсилає запит по локальній мережі й ~2 секунди збирає відповіді.
 ## Кожен знайдений хост — окремий сигнал host_found(ім'я, ip).
 func scan_for_hosts() -> void:
-	AndroidMulticast.acquire("lan_scan")
 	_discovery_client = PacketPeerUDP.new()
 	_discovery_client.set_broadcast_enabled(true)
 	_discovery_client.bind(0)
@@ -381,7 +362,9 @@ func scan_for_hosts() -> void:
 
 
 func _on_scan_timeout() -> void:
-	_stop_lan_discovery_client()
+	if _discovery_client:
+		_discovery_client.close()
+		_discovery_client = null
 	scan_finished.emit()
 
 
@@ -390,8 +373,6 @@ func _on_scan_timeout() -> void:
 ## перепідключення остаточно не вдалось (вичерпано MAX_RECONNECT_ATTEMPTS).
 func end_game() -> void:
 	stop_lan_discovery_server()
-	_stop_lan_discovery_client()
-	AndroidMulticast.release_all()
 	_cleanup_local_scene()
 
 	if peer:
