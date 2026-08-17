@@ -1,107 +1,170 @@
 extends Control
 
-## Gameplay touch HUD для спільного InputMap.
-## TouchScreenButton напряму натискає move_* actions, тому ця сцена нічого
-## не знає про ENet, peer ID або avatar. passby_press дозволяє провести
-## утримуваний палець на сусідній напрямок без попереднього відпускання.
+## Аналоговий mobile joystick, який подає значення до наявного InputMap.
+## Він не має залежностей від мережі, peer ID чи avatar: Input.get_vector()
+## у GameWorld читає ті самі move_* actions на ПК і на телефоні.
 
-const BUTTON_SIZE := Vector2(72.0, 72.0)
-const BUTTON_GAP := 8.0
-const EDGE_MARGIN := 20.0
-const LABEL_FONT_SIZE := 28
+const BASE_RADIUS := 78.0
+const THUMB_RADIUS := 32.0
+const EDGE_MARGIN := 24.0
+const DEAD_ZONE_RATIO := 0.18
 
-const BUTTON_CONFIGS := [
-	{"node_name": "MoveForward", "label": "▲", "action": "move_forward"},
-	{"node_name": "MoveLeft", "label": "◀", "action": "move_left"},
-	{"node_name": "MoveRight", "label": "▶", "action": "move_right"},
-	{"node_name": "MoveBack", "label": "▼", "action": "move_back"},
-]
-
-var _buttons_by_action: Dictionary = {}
-var _centers_by_action: Dictionary = {}
+var _active_touch_index := -1
+var _mouse_drag_active := false
+var _thumb_offset := Vector2.ZERO
 
 
 func _ready() -> void:
-	# У release desktop build HUD прихований. У debug build він видимий,
-	# щоб перевірити його розміщення без Android export.
+	# На телефоні joystick завжди видимий. У debug він також є на ПК,
+	# щоб легко перевірити відчуття joystick мишею без нового Android export.
 	visible = OS.has_feature("mobile") or OS.is_debug_build()
 	if not visible:
 		return
 
-	# Сам Control не ловить gameplay input. Його дочірні TouchScreenButton
-	# мають власні Shape2D для hit detection.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_create_touch_buttons()
-	resized.connect(_layout_touch_buttons)
-	_layout_touch_buttons()
-
-
-func _exit_tree() -> void:
-	# Якщо сцена закривається, поки палець утримує напрямок, не залишаємо
-	# synthetic InputMap action натиснутою для наступної сесії.
-	for button_config in BUTTON_CONFIGS:
-		Input.action_release(str(button_config["action"]))
-
-
-func _create_touch_buttons() -> void:
-	for button_config in BUTTON_CONFIGS:
-		var action: String = str(button_config["action"])
-		var touch_button := TouchScreenButton.new()
-		touch_button.name = str(button_config["node_name"])
-		touch_button.action = action
-		touch_button.passby_press = true
-		touch_button.visibility_mode = TouchScreenButton.VISIBILITY_ALWAYS
-		touch_button.shape = _make_hit_shape()
-		touch_button.shape_visible = false
-		add_child(touch_button)
-		_buttons_by_action[action] = touch_button
-
-
-func _make_hit_shape() -> RectangleShape2D:
-	var hit_shape := RectangleShape2D.new()
-	hit_shape.size = BUTTON_SIZE
-	return hit_shape
-
-
-func _layout_touch_buttons() -> void:
-	# TouchControls заповнює Content всередині SafeArea. Отже нижня межа size.y
-	# уже не містить Android gesture area, iPhone home indicator чи display cutout.
-	# Усі чотири центри лишаються всередині цієї області.
-	var left_x := EDGE_MARGIN + BUTTON_SIZE.x * 0.5
-	var middle_x := left_x + BUTTON_SIZE.x + BUTTON_GAP
-	var right_x := middle_x + BUTTON_SIZE.x + BUTTON_GAP
-	var lower_y := size.y - EDGE_MARGIN - BUTTON_SIZE.y * 0.5
-	var upper_y := lower_y - BUTTON_SIZE.y - BUTTON_GAP
-
-	_set_button_center("move_forward", Vector2(middle_x, upper_y))
-	_set_button_center("move_left", Vector2(left_x, lower_y))
-	_set_button_center("move_right", Vector2(right_x, lower_y))
-	_set_button_center("move_back", Vector2(middle_x, lower_y))
+	resized.connect(_on_resized)
 	queue_redraw()
 
 
-func _set_button_center(action: String, center: Vector2) -> void:
-	var touch_button := _buttons_by_action[action] as TouchScreenButton
-	touch_button.position = center
-	_centers_by_action[action] = center
+func _exit_tree() -> void:
+	_release_all_move_actions()
+
+
+func _on_resized() -> void:
+	# Якщо орієнтація або розмір вікна змінились посеред drag, безпечніше
+	# завершити попередній gesture, ніж залишати рух від старих координат.
+	_stop_drag()
+	queue_redraw()
+
+
+func _input(event: InputEvent) -> void:
+	if not visible:
+		return
+
+	if event is InputEventScreenTouch:
+		var touch_event := event as InputEventScreenTouch
+		if touch_event.pressed:
+			_try_start_touch_drag(touch_event.index, touch_event.position)
+		elif touch_event.index == _active_touch_index:
+			_stop_drag()
+		return
+
+	if event is InputEventScreenDrag and event.index == _active_touch_index:
+		var drag_event := event as InputEventScreenDrag
+		_update_drag(touch_event_to_local(drag_event.position))
+		return
+
+	# У debug build підтримуємо мишу: це не впливає на Android/iOS input.
+	if event is InputEventMouseButton:
+		var mouse_button_event := event as InputEventMouseButton
+		if mouse_button_event.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mouse_button_event.pressed:
+			_try_start_mouse_drag(mouse_button_event.position)
+		elif _mouse_drag_active:
+			_stop_drag()
+		return
+
+	if event is InputEventMouseMotion and _mouse_drag_active:
+		var mouse_motion_event := event as InputEventMouseMotion
+		_update_drag(mouse_motion_event.position)
+
+
+func _try_start_touch_drag(touch_index: int, screen_position: Vector2) -> void:
+	# Лівий joystick бере перший touch лише тоді, коли той почався в його base.
+	# Інші пальці не чіпаємо: вони знадобляться майбутнім action-кнопкам.
+	if _active_touch_index != -1:
+		return
+
+	var local_position := touch_event_to_local(screen_position)
+	if not _is_inside_base(local_position):
+		return
+
+	_active_touch_index = touch_index
+	_update_drag(local_position)
+
+
+func _try_start_mouse_drag(local_position: Vector2) -> void:
+	if not _is_inside_base(local_position):
+		return
+
+	_mouse_drag_active = true
+	_update_drag(local_position)
+
+
+func _update_drag(local_position: Vector2) -> void:
+	var raw_offset := local_position - _get_base_center()
+	_thumb_offset = raw_offset.limit_length(BASE_RADIUS - THUMB_RADIUS)
+
+	var normalized_input := _thumb_offset / (BASE_RADIUS - THUMB_RADIUS)
+	_apply_move_vector(normalized_input)
+	queue_redraw()
+
+
+func _stop_drag() -> void:
+	_active_touch_index = -1
+	_mouse_drag_active = false
+	_thumb_offset = Vector2.ZERO
+	_release_all_move_actions()
+	queue_redraw()
+
+
+func _apply_move_vector(raw_input: Vector2) -> void:
+	# Dead zone прибирає випадковий рух, коли палець близько до центру.
+	# Поза dead zone сила плавно масштабується від 0 до 1.
+	var input_length := raw_input.length()
+	if input_length <= DEAD_ZONE_RATIO:
+		_release_all_move_actions()
+		return
+
+	var direction := raw_input / input_length
+	var strength := inverse_lerp(DEAD_ZONE_RATIO, 1.0, minf(input_length, 1.0))
+
+	_set_action_strength("move_left", maxf(-direction.x, 0.0) * strength)
+	_set_action_strength("move_right", maxf(direction.x, 0.0) * strength)
+	_set_action_strength("move_forward", maxf(-direction.y, 0.0) * strength)
+	_set_action_strength("move_back", maxf(direction.y, 0.0) * strength)
+
+
+func _set_action_strength(action: String, strength: float) -> void:
+	if strength > 0.0:
+		Input.action_press(action, strength)
+	else:
+		Input.action_release(action)
+
+
+func _release_all_move_actions() -> void:
+	Input.action_release("move_left")
+	Input.action_release("move_right")
+	Input.action_release("move_forward")
+	Input.action_release("move_back")
+
+
+func _get_base_center() -> Vector2:
+	return Vector2(EDGE_MARGIN + BASE_RADIUS, size.y - EDGE_MARGIN - BASE_RADIUS)
+
+
+func _is_inside_base(local_position: Vector2) -> bool:
+	return local_position.distance_to(_get_base_center()) <= BASE_RADIUS
+
+
+func touch_event_to_local(screen_position: Vector2) -> Vector2:
+	# Touch position приходить у координатах viewport. TouchControls — Control
+	# на весь Content усередині SafeArea, тому переводимо координати в local.
+	return get_global_transform_with_canvas().affine_inverse() * screen_position
 
 
 func _draw() -> void:
 	if not visible:
 		return
 
-	var font := ThemeDB.fallback_font
-	for button_config in BUTTON_CONFIGS:
-		var action: String = str(button_config["action"])
-		var center: Vector2 = _centers_by_action.get(action, Vector2.ZERO)
-		var touch_button := _buttons_by_action.get(action) as TouchScreenButton
-		var is_pressed := touch_button != null and touch_button.is_pressed()
-		var fill_color := Color("#0F172AE8") if is_pressed else Color("#334155B8")
+	var center := _get_base_center()
+	var thumb_center := center + _thumb_offset
 
-		draw_circle(center, BUTTON_SIZE.x * 0.5, fill_color)
-		draw_arc(center, BUTTON_SIZE.x * 0.5, 0.0, TAU, 32, Color("#FFFFFF55"), 1.0)
+	# Base: напівпрозоре коло, яке показує допустиму область першого торкання.
+	draw_circle(center, BASE_RADIUS, Color("#0F172A88"))
+	draw_arc(center, BASE_RADIUS, 0.0, TAU, 48, Color("#FFFFFF55"), 2.0)
 
-		var label: String = str(button_config["label"])
-		var label_size := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_FONT_SIZE)
-		var label_position := center + Vector2(-label_size.x * 0.5, label_size.y * 0.34)
-		draw_string(font, label_position, label, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_FONT_SIZE, Color.WHITE)
+	# Thumb: фактичне положення пальця, обмежене внутрішнім радіусом joystick.
+	draw_circle(thumb_center, THUMB_RADIUS, Color("#475569DD"))
+	draw_arc(thumb_center, THUMB_RADIUS, 0.0, TAU, 32, Color("#FFFFFFAA"), 2.0)
