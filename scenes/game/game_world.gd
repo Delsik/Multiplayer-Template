@@ -90,7 +90,7 @@ func _sync_player_avatars() -> void:
 		var avatar_peer_id := int(str(avatar.name).trim_prefix("Player_"))
 		if session_peer_ids.has(avatar_peer_id):
 			continue
-		player_spawner.despawn(avatar)
+		avatar.queue_free()
 
 
 ## spawn_function викликається локально на server і автоматично на всіх peer.
@@ -118,6 +118,9 @@ func _get_player_avatar(peer_id: int) -> CharacterBody3D:
 ## Локальний peer читає platform-neutral InputMap. На ПК це вже WASD;
 ## у наступному кроці touch controls натискатимуть ці самі actions.
 func _physics_process(_delta: float) -> void:
+	if not multiplayer.has_multiplayer_peer():
+		return
+
 	var move_intent := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	if multiplayer.is_server():
 		_set_player_move_intent(1, move_intent)

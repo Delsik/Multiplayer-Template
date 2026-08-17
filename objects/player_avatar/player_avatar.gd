@@ -49,6 +49,9 @@ func set_move_intent(move_intent: Vector2) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if not multiplayer.has_multiplayer_peer():
+		return
+	
 	# Лише server симулює CharacterBody3D. Клієнти отримують готову position
 	# через MultiplayerSynchronizer і не мають права самостійно рухати avatar.
 	if not multiplayer.is_server():
