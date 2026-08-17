@@ -20,10 +20,13 @@ func _ready() -> void:
 
 func refresh_player_list() -> void:
 	player_list.clear()
-	# Себе показуємо окремо — Network.players нас не містить (див. пояснення раніше).
-	player_list.add_item("%s (ти)" % Network.player_name)
-	for id: int in Network.players:
-		player_list.add_item(Network.players[id])
+
+	var local_peer_id := multiplayer.get_unique_id()
+	for player in Network.get_players():
+		var peer_id: int = int(player["peer_id"])
+		var player_name: String = str(player["player_name"])
+		var suffix := " (ти)" if peer_id == local_peer_id else ""
+		player_list.add_item(player_name + suffix)
 
 
 func _on_start_button_pressed() -> void:

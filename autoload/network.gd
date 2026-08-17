@@ -18,8 +18,10 @@ var peer: ENetMultiplayerPeer
 ## Ім'я локального гравця.
 var player_name: String = "Player%d" % (randi() % 1000)
 
-## Зареєстровані гравці: {peer_id: player_name}. НЕ включає себе самого.
-var players: Dictionary = {}
+## Канонічний список усіх гравців поточної сесії:
+## {peer_id: player_name}. У listen-server режимі завжди включає host з peer_id = 1.
+## Кожен клієнт має локальну синхронізовану копію цього реєстру.
+var players_by_peer_id: Dictionary = {}
 
 ## Id гравців, які зараз "приєднуються на льоту" й ще не підтвердили,
 ## що GameWorld у них локально готовий. Поки peer тут — йому НЕ показуємо
@@ -117,9 +119,10 @@ func _on_peer_disconnected(id: int) -> void:
 
 
 func _on_connected_ok() -> void:
-	# Спрацьовує ЛИШЕ в клієнта: успішно з'єднались із сервером
+	# Спрацьовує лише в клієнта: успішно з’єднались із сервером
 	# (включно з успішним перепідключенням після розриву).
 	_is_reconnecting = false
+	_upsert_player(multiplayer.get_unique_id(), player_name)
 	connection_succeeded.emit()
 
 
@@ -196,23 +199,46 @@ func _prepare_for_new_session() -> void:
 		_reconnect_timer = null
 
 
+## Додає або оновлює один профіль у локальній копії session player registry.
+## У V1 профіль містить лише ім’я; пізніше сюди природно додадуться
+## колір, avatar, ready та інші спільні дані гравця.
+func _upsert_player(peer_id: int, new_player_name: String) -> void:
+	players_by_peer_id[peer_id] = new_player_name
+	player_list_changed.emit()
+
+
 # --- Реєстрація гравців у лобі ---
-@rpc("any_peer")
+
+## RPC надходить від конкретного ENet peer. Ідентичність беремо не з даних,
+## які надсилає клієнт, а з remote sender ID, який призначив сервер/ENet.
+@rpc("any_peer", "reliable")
 func register_player(new_player_name: String) -> void:
-	var id := multiplayer.get_remote_sender_id()
-	players[id] = new_player_name
+	var peer_id := multiplayer.get_remote_sender_id()
+	_upsert_player(peer_id, new_player_name)
+
+
+func unregister_player(peer_id: int) -> void:
+	if not players_by_peer_id.erase(peer_id):
+		return
 	player_list_changed.emit()
 
 
-func unregister_player(id: int) -> void:
-	players.erase(id)
-	player_list_changed.emit()
+## Повертає стабільний snapshot усіх session players.
+## Host (peer_id = 1) завжди йде першим; решта peer впорядковані за ID.
+func get_players() -> Array[Dictionary]:
+	var peer_ids: Array[int] = []
+	for peer_id: int in players_by_peer_id:
+		peer_ids.append(peer_id)
+	peer_ids.sort()
 
+	var registered_players: Array[Dictionary] = []
+	for peer_id in peer_ids:
+		registered_players.append({
+			"peer_id": peer_id,
+			"player_name": str(players_by_peer_id[peer_id]),
+		})
 
-func get_player_list() -> Array:
-	return players.values()
-
-
+	return registered_players
 # --- Старт мережі ---
 
 ## Створює ENet-сервер. Повертає true лише коли peer успішно запущено.
@@ -229,6 +255,7 @@ func host_game(new_player_name: String) -> bool:
 		return false
 
 	multiplayer.multiplayer_peer = peer
+	_upsert_player(1, player_name)
 	return true
 
 
@@ -316,7 +343,8 @@ func end_game() -> void:
 		peer = null
 	multiplayer.multiplayer_peer = null
 
-	players.clear()
+	players_by_peer_id.clear()
+	player_list_changed.emit()
 	game_ended.emit()
 
 
