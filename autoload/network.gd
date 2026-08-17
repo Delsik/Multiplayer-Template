@@ -3,8 +3,10 @@ extends Node
 ## Порт за замовчуванням для сервера. 1024–49151, поза списком зареєстрованих портів.
 const DEFAULT_PORT := 10567
 
-## Максимальна кількість гравців (включно з хостом).
-const MAX_PLAYERS := 8
+## Загальний ліміт гравців у сесії, включно з хостом.
+const MAX_TOTAL_PLAYERS := 8
+## ENet create_server() очікує лише кількість віддалених клієнтів.
+const MAX_REMOTE_CLIENTS := MAX_TOTAL_PLAYERS - 1
 
 ## Шлях до сцени ігрового світу. У V1 це просто сцена з падаючими кубиками.
 const GAME_WORLD_SCENE := "res://scenes/game/game_world.tscn"
@@ -180,8 +182,21 @@ func _on_reconnect_timer_timeout() -> void:
 	join_game(_last_join_ip, player_name)
 
 
-# --- Реєстрація гравців у лобі ---
+## Скидає тільки локальний transient state перед новим Host або Join.
+## Тут НЕ викликаємо end_game(): Menu вже керує тим, коли попередня сесія
+## завершена, а нова спроба не повинна штучно запускати game_ended/UI cleanup.
+func _prepare_for_new_session() -> void:
+	_intentional_disconnect = false
+	_is_reconnecting = false
+	_reconnect_attempts = 0
 
+	if _reconnect_timer:
+		_reconnect_timer.stop()
+		_reconnect_timer.queue_free()
+		_reconnect_timer = null
+
+
+# --- Реєстрація гравців у лобі ---
 @rpc("any_peer")
 func register_player(new_player_name: String) -> void:
 	var id := multiplayer.get_remote_sender_id()
@@ -200,19 +215,40 @@ func get_player_list() -> Array:
 
 # --- Старт мережі ---
 
-func host_game(new_player_name: String) -> void:
+## Створює ENet-сервер. Повертає true лише коли peer успішно запущено.
+func host_game(new_player_name: String) -> bool:
+	_prepare_for_new_session()
+	player_name = new_player_name
+	_last_join_ip = ""
+	peer = ENetMultiplayerPeer.new()
+
+	var error := peer.create_server(DEFAULT_PORT, MAX_REMOTE_CLIENTS)
+	if error != OK:
+		peer = null
+		game_error.emit("Не вдалося створити сервер: %s" % error_string(error))
+		return false
+
+	multiplayer.multiplayer_peer = peer
+	return true
+
+
+## Починає підключення ENet-клієнта. Повертає false лише якщо peer не можна
+## створити синхронно. Помилка недоступного сервера далі прийде стандартним
+## сигналом connection_failed.
+func join_game(ip_address: String, new_player_name: String) -> bool:
+	_prepare_for_new_session()
 	player_name = new_player_name
 	peer = ENetMultiplayerPeer.new()
-	peer.create_server(DEFAULT_PORT, MAX_PLAYERS)
-	multiplayer.multiplayer_peer = peer
 
+	var error := peer.create_client(ip_address, DEFAULT_PORT)
+	if error != OK:
+		peer = null
+		game_error.emit("Не вдалося почати підключення: %s" % error_string(error))
+		return false
 
-func join_game(ip_address: String, new_player_name: String) -> void:
-	player_name = new_player_name
 	_last_join_ip = ip_address
-	peer = ENetMultiplayerPeer.new()
-	peer.create_client(ip_address, DEFAULT_PORT)
 	multiplayer.multiplayer_peer = peer
+	return true
 
 
 ## Перериває поточну спробу підключення чи перепідключення (наприклад,

@@ -25,6 +25,7 @@ func _ready() -> void:
 	Network.reconnecting.connect(_on_reconnecting)
 	Network.reconnect_failed.connect(_on_reconnect_failed)
 	Network.connection_cancelled.connect(_on_connection_cancelled)
+	Network.game_error.connect(_on_game_error)
 
 	scan_button.pressed.connect(_on_scan_button_pressed)
 	host_list.item_selected.connect(_on_host_list_item_selected)
@@ -50,7 +51,9 @@ func _ready() -> void:
 func _on_solo_button_pressed() -> void:
 	if not _validate_name():
 		return
-	Network.host_game(name_edit.text)
+	if not Network.host_game(name_edit.text):
+		return
+
 	# Соло: одразу стартуємо гру, без очікування в лобі.
 	Network.begin_game()
 	# Соло за замовчуванням приватне — ніхто не повинен випадково
@@ -62,7 +65,9 @@ func _on_solo_button_pressed() -> void:
 func _on_host_button_pressed() -> void:
 	if not _validate_name():
 		return
-	Network.host_game(name_edit.text)
+	if not Network.host_game(name_edit.text):
+		return
+
 	# На відміну від Solo — Host має "світитись" для сканерів мережі.
 	Network.start_lan_discovery_server()
 	_enter_lobby()
@@ -78,10 +83,12 @@ func _on_join_button_pressed() -> void:
 
 
 func _join(ip_address: String) -> void:
+	if not Network.join_game(ip_address, name_edit.text):
+		return
+
 	_set_form_visible(false)
 	cancel_button.visible = true
 	_show_status("Підключення")
-	Network.join_game(ip_address, name_edit.text)
 
 
 func _on_scan_button_pressed() -> void:
@@ -140,6 +147,13 @@ func _on_connection_failed() -> void:
 	cancel_button.visible = false
 	_set_form_visible(true)
 	error_label.text = "Не вдалось підключитись до сервера"
+
+
+func _on_game_error(message: String) -> void:
+	_hide_status()
+	cancel_button.visible = false
+	_set_form_visible(true)
+	error_label.text = message
 
 
 func _on_connection_cancelled() -> void:
