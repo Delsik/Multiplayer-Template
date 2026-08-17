@@ -98,7 +98,10 @@ func _process(_delta: float) -> void:
 func _on_peer_connected(id: int) -> void:
 	# Спрацьовує і на сервері, і на клієнтах, коли будь-хто новий приєднався.
 	# Тут ми (незалежно від того, сервер ми чи клієнт) представляємось новому peer.
-	register_player.rpc_id(id, player_name)
+	# Тільки сервер тримає канонічний roster. Новий peer спершу отримує
+	# повний snapshot усіх, хто вже є в сесії, включно з host.
+	if multiplayer.is_server():
+		sync_player_registry.rpc_id(id, players_by_peer_id)
 
 	# Late join: якщо гра вже триває, лише сервер наздоганяє новачка світом.
 	# Доки peer не підтвердив готовність (world_ready), він у _pending_late_joiners
@@ -109,12 +112,12 @@ func _on_peer_connected(id: int) -> void:
 
 
 func _on_peer_disconnected(id: int) -> void:
-	# Хтось (крім сервера — той обробляється окремо через _on_server_disconnected)
-	# вийшов або втратив з'єднання. Гра для решти триває, просто прибираємо його
-	# зі списку гравців. У V1 немає гравцевих об'єктів у GameWorld, тому більше
-	# нічого чистити не треба — коли з'явиться гравцева сцена, тут буде місце
-	# для деспавну персонажа цього id.
-	unregister_player(id)
+	# Сервер є єдиним джерелом правди про склад сесії. Він прибирає peer
+	# і розсилає новий snapshot усім, хто залишився підключеним.
+	if multiplayer.is_server():
+		unregister_player(id)
+		_publish_player_registry()
+
 	_pending_late_joiners.erase(id)
 
 
@@ -122,7 +125,11 @@ func _on_connected_ok() -> void:
 	# Спрацьовує лише в клієнта: успішно з’єднались із сервером
 	# (включно з успішним перепідключенням після розриву).
 	_is_reconnecting = false
+
+	# Локально додаємо себе відразу, щоб Lobby не показував порожній список,
+	# а потім server поверне повний канонічний snapshot через sync_player_registry.
 	_upsert_player(multiplayer.get_unique_id(), player_name)
+	register_player.rpc_id(1, player_name)
 	connection_succeeded.emit()
 
 
@@ -207,14 +214,36 @@ func _upsert_player(peer_id: int, new_player_name: String) -> void:
 	player_list_changed.emit()
 
 
+## Сервер розсилає канонічний roster усім peer після зміни складу сесії.
+func _publish_player_registry() -> void:
+	if not multiplayer.is_server():
+		return
+	sync_player_registry.rpc(players_by_peer_id)
+
+
+## Застосовує повний snapshot, який надійшов тільки від server authority.
+## call_local важливий: після publish server теж проходить через той самий
+## шлях оновлення registry, що й клієнти.
+@rpc("authority", "call_local", "reliable")
+func sync_player_registry(server_players_by_peer_id: Dictionary) -> void:
+	players_by_peer_id = server_players_by_peer_id.duplicate()
+	player_list_changed.emit()
+
+
 # --- Реєстрація гравців у лобі ---
 
 ## RPC надходить від конкретного ENet peer. Ідентичність беремо не з даних,
 ## які надсилає клієнт, а з remote sender ID, який призначив сервер/ENet.
 @rpc("any_peer", "reliable")
 func register_player(new_player_name: String) -> void:
+	# Клієнт надсилає лише власне ім’я. Сам peer_id беремо з ENet sender,
+	# тому клієнт не може зареєструватися під ID іншого гравця.
+	if not multiplayer.is_server():
+		return
+
 	var peer_id := multiplayer.get_remote_sender_id()
 	_upsert_player(peer_id, new_player_name)
+	_publish_player_registry()
 
 
 func unregister_player(peer_id: int) -> void:
